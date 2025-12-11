@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+~$*
+
+# Generated files
+*.zip
+output/
+
+# Receipts (user data)
+receipts/*.png
+receipts/*.jpg
+receipts/*.jpeg
+receipts/*.heic
+receipts/*.pdf
+
+# Keep the template
+!YourSurname_E1-Nonemployee-expense-form.xlsx
