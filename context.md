@@ -18,6 +18,7 @@ flowchart TB
         header["HeaderForm.tsx<br/>User info form"]
         drop["DropZone.tsx<br/>File upload"]
         review["ReceiptReview.tsx<br/>Review & refine"]
+        imgmodal["ImageModal.tsx<br/>Pan/zoom viewer"]
         model["ModelSelector.tsx<br/>VLM picker"]
     end
 
@@ -78,11 +79,12 @@ sequenceDiagram
 
 | File | Purpose | Key Functions |
 |------|---------|---------------|
-| `frontend/app/page.tsx` | Main orchestrator | `processAllReceipts()`, `handleReparse()`, `handleGenerate()` |
-| `frontend/components/ReceiptReview.tsx` | Receipt review UI | Parse mode toggle, re-parse button, approve flow, image preview |
+| `frontend/app/page.tsx` | Main orchestrator, type definitions | `processAllReceipts()`, `handleReparse()`, `handleGenerate()`, `handleUpdateParsed()` |
+| `frontend/components/ReceiptReview.tsx` | Receipt review UI with type-specific collapsible sections | 4 sections (Travel General, Mileage, Hospitality, Other), inline field editing, VLM chat |
 | `frontend/components/ImageModal.tsx` | Full-screen image viewer | Pan/zoom with react-zoom-pan-pinch, keyboard controls |
-| `frontend/components/HeaderForm.tsx` | User info form | Auto-saves to localStorage |
+| `frontend/components/HeaderForm.tsx` | User info form | Auto-saves to localStorage, exchange rate field |
 | `frontend/components/DropZone.tsx` | File upload | Drag & drop, file type filtering |
+| `frontend/components/ModelSelector.tsx` | VLM model picker | Dropdown to select VLM model |
 
 ### Backend
 
@@ -107,43 +109,65 @@ stateDiagram-v2
     Generate --> [*]: Download ZIP
 ```
 
-## Excel Mapping
+## Excel Mapping & Type-Specific Fields
+
+The system uses **type-specific field structures** that match Excel columns for each section:
 
 ```mermaid
 flowchart LR
-    subgraph Input["Parsed Receipt"]
-        type["expense_type"]
-        amount["amount"]
-        date["date"]
-        vendor["vendor"]
-        guests["guest_count"]
+    subgraph ParsedReceipt["Parsed Receipt (new structure)"]
+        active["active_section"]
+        fields["fields object"]
     end
 
-    subgraph Excel["E1 Form Sections"]
-        travel["Travel<br/>Rows 13-18"]
-        hosp["Hospitality<br/>Rows 32-35"]
-        other["Other<br/>Rows 41-47"]
+    subgraph Sections["4 Expense Sections"]
+        travel["travel_general<br/>Rows 13-18"]
+        mileage["travel_mileage<br/>Rows 23-26"]
+        hosp["hospitality<br/>Rows 32-35"]
+        other["other<br/>Rows 41-47"]
     end
 
-    type -->|AIR TRAVEL, RAIL, TAXI| travel
-    type -->|HOSPITALITY| hosp
-    type -->|CONFERENCE, HOTEL, etc| other
+    active -->|travel_general| travel
+    active -->|travel_mileage| mileage
+    active -->|hospitality| hosp
+    active -->|other| other
 ```
 
-The E1 form has specific sections:
-- **Travel (rows 13-18)**: Mode dropdown (AIR TRAVEL, RAIL, TAXI, etc.)
-- **Hospitality (rows 32-35)**: Guest name, organization, guest count
-- **Other (rows 41-47)**: Expense type dropdown (CONFERENCE FEES, HOTEL/SUBSISTENCE, etc.)
+### E1 Form Section Details
 
-See `EXPENSE_SECTION_MAP` in `excel_generator.py` for full mapping.
+| Section | Rows | Fields |
+|---------|------|--------|
+| **Travel General** | 13-18 | Date, Mode (AIR TRAVEL/RAIL/TAXI/CAR HIRE/CAR PARKING/OTHER), Return?, From, To, Foreign Currency, Sterling Total, Non UK/EU |
+| **Travel Mileage** | 23-26 | Date, Number of Miles, Return?, From, To, Cost per Mile |
+| **Hospitality** | 32-35 | Date, Principal Guest, Organisation, Total Numbers, Foreign Currency, Sterling Total, Non-college Staff |
+| **Other/Subsistence** | 41-47 | Date, Expense Type (HOTEL/SUBSISTENCE/CONFERENCE FEES/etc), Description, Foreign Currency, Sterling Total, Non UK/EU |
+
+### ParsedReceipt Data Structure
+
+```typescript
+interface ParsedReceipt {
+  active_section: 'travel_general' | 'travel_mileage' | 'hospitality' | 'other'
+  confidence: 'high' | 'medium' | 'low'
+  raw_description: string
+  fields: {
+    travel_general: { date, mode, is_return, from_location, to_location, foreign_currency, sterling_total, is_non_uk_eu }
+    travel_mileage: { date, miles, is_return, from_location, to_location, cost_per_mile }
+    hospitality: { date, principal_guest, organisation, total_numbers, foreign_currency, sterling_total, non_college_staff }
+    other: { date, expense_type, description, foreign_currency, sterling_total, is_non_uk_eu }
+  }
+}
+```
+
+See `SECTION_TO_EXCEL` in `excel_generator.py` for section routing.
 
 ## VLM Prompts
 
 Located in `vlm_client.py`:
 - `PARSE_IMAGE_PROMPT` - For image-based parsing (OCR + semantic understanding)
 - `PARSE_TEXT_PROMPT` - For text-only parsing (user describes receipt)
+- `refine_receipt()` - VLM chat for complex operations (e.g., "divide by 6 for shared bill")
 
-Both return structured JSON with: expense_type, amount, currency, date, vendor, description, guest_count, confidence
+All prompts return the type-specific JSON structure with `active_section`, `confidence`, `raw_description`, and `fields` containing all 4 section field objects.
 
 ## Common Modifications
 

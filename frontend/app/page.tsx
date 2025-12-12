@@ -5,45 +5,20 @@ import HeaderForm from '@/components/HeaderForm'
 import DropZone from '@/components/DropZone'
 import ReceiptReview from '@/components/ReceiptReview'
 import ModelSelector from '@/components/ModelSelector'
+import {
+  Receipt,
+  HeaderInfo,
+  ParsedReceipt,
+  createEmptyFields,
+  createEmptyParsedReceipt,
+} from '@/lib/types'
 
 const API_URL = 'http://localhost:8000'
 
-export interface ParsedReceipt {
-  expense_type: string
-  amount: number
-  currency: string
-  date: string
-  vendor: string
-  description: string
-  guest_count: number | null
-  is_group_expense: boolean
-  confidence: string
-  is_non_uk_eu: boolean
-}
 
-export interface Receipt {
-  id: string
-  filename: string
-  image_base64: string
-  thumbnail_base64: string
-  parsed: ParsedReceipt | null
-  approved: boolean
-  processing: boolean
-  error: string | null
-}
-
-export interface HeaderInfo {
-  name: string
-  cid: string
-  dob: string
-  address: string
-  postcode: string
-  bank_name: string
-  bank_branch: string
-  sort_code: string
-  account_number: string
-  foreign_currency: string
-  exchange_rate: string
+// Extended Receipt type with file for local processing
+interface ReceiptWithFile extends Receipt {
+  file?: File
 }
 
 type AppState = 'upload' | 'review'
@@ -177,15 +152,20 @@ export default function Home() {
 
       // All retries failed - create placeholder for manual entry
       const emptyParsed: ParsedReceipt = {
-        expense_type: 'OTHER',
-        amount: 0,
-        currency: 'USD',
-        date: new Date().toISOString().split('T')[0],
-        vendor: 'Unknown',
-        description: 'Failed to parse after 3 attempts - please fill manually',
-        guest_count: null,
-        is_group_expense: false,
+        active_section: 'other',
         confidence: 'low',
+        raw_description: 'Failed to parse after 3 attempts - please fill manually',
+        fields: {
+          ...createEmptyFields(),
+          other: {
+            date: new Date().toISOString().split('T')[0],
+            expense_type: 'OTHER',
+            description: 'Failed to parse - please fill manually',
+            foreign_currency: null,
+            sterling_total: 0,
+            is_non_uk_eu: false
+          }
+        }
       }
 
       setReceipts((prev) =>
@@ -265,6 +245,15 @@ export default function Home() {
     if (index < receipts.length - 1) {
       setCurrentIndex(index + 1)
     }
+  }
+
+  // Handler for updating parsed fields directly (inline editing)
+  const handleUpdateParsed = (index: number, newParsed: ParsedReceipt) => {
+    setReceipts((prev) =>
+      prev.map((r, idx) =>
+        idx === index ? { ...r, parsed: newParsed } : r
+      )
+    )
   }
 
   const handleGenerate = async () => {
@@ -393,6 +382,7 @@ export default function Home() {
               onIndexChange={setCurrentIndex}
               onReparse={handleReparse}
               onApprove={handleApprove}
+              onUpdateParsed={handleUpdateParsed}
             />
 
             <div className="mt-4 pt-4 border-t flex items-center justify-between">

@@ -1,6 +1,6 @@
 'use client'
 
-import { HeaderInfo } from '@/app/page'
+import { HeaderInfo } from '@/lib/types'
 
 interface Props {
   headerInfo: HeaderInfo

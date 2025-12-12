@@ -9,14 +9,11 @@ load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-VALID_EXPENSE_TYPES = [
-    "AIR TRAVEL",
-    "RAIL",
-    "TAXI",
-    "CAR HIRE",
-    "CAR PARKING",
-    "OTHER",
-    "HOSPITALITY",
+# Expense types grouped by section
+TRAVEL_GENERAL_TYPES = ["AIR TRAVEL", "RAIL", "TAXI", "CAR HIRE", "CAR PARKING", "OTHER"]
+TRAVEL_MILEAGE_TYPES = ["MILEAGE"]
+HOSPITALITY_TYPES = ["HOSPITALITY"]
+OTHER_TYPES = [
     "HOTEL / SUBSISTENCE",
     "CONFERENCE FEES",
     "BOOKS",
@@ -28,50 +25,187 @@ VALID_EXPENSE_TYPES = [
     "OFFICE SUNDRIES",
 ]
 
-PARSE_IMAGE_PROMPT = f"""Analyze this receipt image. Perform OCR to extract all text, then determine:
+VALID_EXPENSE_TYPES = TRAVEL_GENERAL_TYPES + TRAVEL_MILEAGE_TYPES + HOSPITALITY_TYPES + OTHER_TYPES
 
-1. expense_type: Classify as ONE of these exact values:
-   {json.dumps(VALID_EXPENSE_TYPES)}
+def get_section_for_expense_type(expense_type: str) -> str:
+    """Determine which section an expense type belongs to."""
+    if expense_type in TRAVEL_GENERAL_TYPES:
+        return "travel_general"
+    elif expense_type in TRAVEL_MILEAGE_TYPES:
+        return "travel_mileage"
+    elif expense_type in HOSPITALITY_TYPES:
+        return "hospitality"
+    else:
+        return "other"
 
-   IMPORTANT: Food/meal/restaurant receipts should always be "HOTEL / SUBSISTENCE"
 
-2. amount: Total amount paid (number only, e.g., 199.61)
-3. currency: USD, GBP, EUR, etc.
-4. date: In YYYY-MM-DD format
-5. vendor: Business/merchant name
-6. description: Write a professional expense description that includes:
-   - What was purchased (e.g., "Lunch", "Dinner", specific items if visible)
-   - The venue/location name
-   - Assume this is a business expense during a conference or work trip - phrase it accordingly
-   - Example: "Lunch during conference at The Milner hotel, Cambridge"
-7. guest_count: Number of people if visible on receipt, null otherwise
-8. is_group_expense: true if receipt shows multiple people, false otherwise
-9. confidence: "high" if receipt is clear, "medium" if some parts unclear, "low" if hard to read
-10. is_non_uk_eu: true if the receipt is from outside UK/EU (based on currency like USD/CAD/AUD or location like USA/Canada/Asia), false if GBP/EUR or UK/EU location
+def create_empty_fields() -> dict:
+    """Create empty field structure with all sections set to null values."""
+    return {
+        "travel_general": {
+            "date": None,
+            "mode": None,
+            "is_return": False,
+            "from_location": None,
+            "to_location": None,
+            "foreign_currency": None,
+            "sterling_total": None,
+            "is_non_uk_eu": False
+        },
+        "travel_mileage": {
+            "date": None,
+            "miles": None,
+            "is_return": False,
+            "from_location": None,
+            "to_location": None,
+            "cost_per_mile": None
+        },
+        "hospitality": {
+            "date": None,
+            "principal_guest": None,
+            "organisation": None,
+            "total_numbers": None,
+            "foreign_currency": None,
+            "sterling_total": None,
+            "non_college_staff": False
+        },
+        "other": {
+            "date": None,
+            "expense_type": None,
+            "description": None,
+            "foreign_currency": None,
+            "sterling_total": None,
+            "is_non_uk_eu": False
+        }
+    }
 
-Return ONLY valid JSON, no markdown or explanation:
-{{"expense_type": "...", "amount": 0.00, "currency": "...", "date": "YYYY-MM-DD", "vendor": "...", "description": "...", "guest_count": null, "is_group_expense": false, "confidence": "...", "is_non_uk_eu": false}}"""
 
-PARSE_TEXT_PROMPT = f"""The user describes a receipt/expense. Extract structured data from their description.
+def create_empty_parsed_receipt() -> dict:
+    """Create empty parsed receipt with default structure."""
+    return {
+        "active_section": "other",
+        "confidence": "low",
+        "raw_description": "",
+        "fields": create_empty_fields()
+    }
 
-1. expense_type: Classify as ONE of these exact values:
-   {json.dumps(VALID_EXPENSE_TYPES)}
+PARSE_IMAGE_PROMPT = f"""Analyze this receipt image. Perform OCR to extract all text, then determine the expense type and fill in the appropriate section fields.
 
-   IMPORTANT: Food/meal/restaurant expenses should always be "HOTEL / SUBSISTENCE"
+EXPENSE TYPES BY SECTION:
+- TRAVEL GENERAL: {json.dumps(TRAVEL_GENERAL_TYPES)}
+- TRAVEL MILEAGE: ["MILEAGE"] (for car mileage claims)
+- HOSPITALITY: ["HOSPITALITY"] (for entertaining guests/clients)
+- OTHER: {json.dumps(OTHER_TYPES)}
 
-2. amount: Total amount (number only)
-3. currency: USD, GBP, EUR, etc. (default GBP if not specified)
-4. date: In YYYY-MM-DD format (use today's date if not specified)
-5. vendor: Business name (use "Unknown" if not provided)
-6. description: Write a professional expense description for a conference/work trip context
-   - Example: "Lunch during conference at The Milner hotel, Cambridge"
-7. guest_count: Number of people if mentioned, null otherwise
-8. is_group_expense: true if multiple people mentioned
-9. confidence: "high" since user provided the info
-10. is_non_uk_eu: true if currency is not GBP/EUR or location is outside UK/EU, false otherwise
+IMPORTANT: Food/meal/restaurant receipts should be "HOTEL / SUBSISTENCE" (in OTHER section)
 
-Return ONLY valid JSON, no markdown:
-{{"expense_type": "...", "amount": 0.00, "currency": "...", "date": "YYYY-MM-DD", "vendor": "...", "description": "...", "guest_count": null, "is_group_expense": false, "confidence": "...", "is_non_uk_eu": false}}"""
+Based on the receipt, fill in ONE section's fields (the most appropriate), leave others as null.
+
+Return ONLY valid JSON with this structure:
+{{
+  "active_section": "travel_general" | "travel_mileage" | "hospitality" | "other",
+  "confidence": "high" | "medium" | "low",
+  "raw_description": "Brief description of what this receipt is for",
+  "fields": {{
+    "travel_general": {{
+      "date": "YYYY-MM-DD or null",
+      "mode": "AIR TRAVEL|RAIL|TAXI|CAR HIRE|CAR PARKING|OTHER or null",
+      "is_return": false,
+      "from_location": "origin or null",
+      "to_location": "destination or null",
+      "foreign_currency": "amount CURRENCY (e.g. '50.00 USD') or null if GBP",
+      "sterling_total": number_in_gbp,
+      "is_non_uk_eu": true/false
+    }},
+    "travel_mileage": {{
+      "date": "YYYY-MM-DD or null",
+      "miles": number_or_null,
+      "is_return": false,
+      "from_location": "origin or null",
+      "to_location": "destination or null",
+      "cost_per_mile": number_or_null
+    }},
+    "hospitality": {{
+      "date": "YYYY-MM-DD or null",
+      "principal_guest": "name or null",
+      "organisation": "guest's org or null",
+      "total_numbers": number_or_null,
+      "foreign_currency": "amount CURRENCY or null if GBP",
+      "sterling_total": number_in_gbp_or_null,
+      "non_college_staff": true/false
+    }},
+    "other": {{
+      "date": "YYYY-MM-DD or null",
+      "expense_type": "HOTEL / SUBSISTENCE|CONFERENCE FEES|etc or null",
+      "description": "expense description or null",
+      "foreign_currency": "amount CURRENCY or null if GBP",
+      "sterling_total": number_in_gbp_or_null,
+      "is_non_uk_eu": true/false
+    }}
+  }}
+}}
+
+NOTES:
+- Fill the active section with extracted values, set other sections to have all null values
+- is_non_uk_eu: true if outside UK/EU (USD/CAD/AUD or USA/Canada/Asia location)
+- For hospitality, use vendor name as principal_guest if no guest name visible
+- sterling_total should be the GBP amount (convert mentally if foreign currency)"""
+
+PARSE_TEXT_PROMPT = f"""The user describes a receipt/expense. Extract structured data and fill in the appropriate section fields.
+
+EXPENSE TYPES BY SECTION:
+- TRAVEL GENERAL: {json.dumps(TRAVEL_GENERAL_TYPES)}
+- TRAVEL MILEAGE: ["MILEAGE"] (for car mileage claims)
+- HOSPITALITY: ["HOSPITALITY"] (for entertaining guests/clients)
+- OTHER: {json.dumps(OTHER_TYPES)}
+
+IMPORTANT: Food/meal/restaurant expenses should be "HOTEL / SUBSISTENCE" (in OTHER section)
+
+Return ONLY valid JSON with this structure:
+{{
+  "active_section": "travel_general" | "travel_mileage" | "hospitality" | "other",
+  "confidence": "high",
+  "raw_description": "Brief description based on user input",
+  "fields": {{
+    "travel_general": {{
+      "date": "YYYY-MM-DD or null",
+      "mode": "AIR TRAVEL|RAIL|TAXI|CAR HIRE|CAR PARKING|OTHER or null",
+      "is_return": false,
+      "from_location": "origin or null",
+      "to_location": "destination or null",
+      "foreign_currency": "amount CURRENCY or null if GBP",
+      "sterling_total": number_in_gbp_or_null,
+      "is_non_uk_eu": true/false
+    }},
+    "travel_mileage": {{
+      "date": "YYYY-MM-DD or null",
+      "miles": number_or_null,
+      "is_return": false,
+      "from_location": "origin or null",
+      "to_location": "destination or null",
+      "cost_per_mile": number_or_null
+    }},
+    "hospitality": {{
+      "date": "YYYY-MM-DD or null",
+      "principal_guest": "name or null",
+      "organisation": "guest's org or null",
+      "total_numbers": number_or_null,
+      "foreign_currency": "amount CURRENCY or null if GBP",
+      "sterling_total": number_in_gbp_or_null,
+      "non_college_staff": true/false
+    }},
+    "other": {{
+      "date": "YYYY-MM-DD or null",
+      "expense_type": "HOTEL / SUBSISTENCE|CONFERENCE FEES|etc or null",
+      "description": "expense description or null",
+      "foreign_currency": "amount CURRENCY or null if GBP",
+      "sterling_total": number_in_gbp_or_null,
+      "is_non_uk_eu": true/false
+    }}
+  }}
+}}
+
+Fill the appropriate section based on user description, set other sections to null values."""
 
 
 def get_client():
@@ -145,32 +279,73 @@ async def parse_receipt_text(user_text: str, model: str) -> dict:
 async def refine_receipt(
     user_text: str, original_data: Optional[dict], model: str
 ) -> dict:
-    """Refine receipt data based on user feedback."""
+    """Refine receipt data based on user feedback (VLM chat for complex operations)."""
     client = get_client()
 
     context = ""
     if original_data:
-        context = f"Previous extraction: {json.dumps(original_data)}\n\n"
+        context = f"Current expense data: {json.dumps(original_data)}\n\n"
 
-    prompt = f"""{context}User's correction/input: "{user_text}"
+    prompt = f"""{context}User's instruction: "{user_text}"
 
-Update the expense data based on user's input. Return ONLY valid JSON with these fields:
-- expense_type (one of: {json.dumps(VALID_EXPENSE_TYPES)})
-- amount (number)
-- currency
-- date (YYYY-MM-DD)
-- vendor
-- description (updated based on user input)
-- guest_count (number or null)
-- is_group_expense (boolean)
-- confidence ("high" since user confirmed)"""
+The user wants to modify the expense data. This could be:
+- Changing the expense type/section
+- Mathematical operations (e.g., "divide by 6 for shared bill")
+- Correcting field values
+- Adding missing information
+
+Return the UPDATED expense data in this JSON structure:
+{{
+  "active_section": "travel_general" | "travel_mileage" | "hospitality" | "other",
+  "confidence": "high",
+  "raw_description": "updated description",
+  "fields": {{
+    "travel_general": {{
+      "date": "YYYY-MM-DD or null",
+      "mode": "AIR TRAVEL|RAIL|TAXI|CAR HIRE|CAR PARKING|OTHER or null",
+      "is_return": boolean,
+      "from_location": "string or null",
+      "to_location": "string or null",
+      "foreign_currency": "amount CURRENCY or null",
+      "sterling_total": number_or_null,
+      "is_non_uk_eu": boolean
+    }},
+    "travel_mileage": {{
+      "date": "YYYY-MM-DD or null",
+      "miles": number_or_null,
+      "is_return": boolean,
+      "from_location": "string or null",
+      "to_location": "string or null",
+      "cost_per_mile": number_or_null
+    }},
+    "hospitality": {{
+      "date": "YYYY-MM-DD or null",
+      "principal_guest": "string or null",
+      "organisation": "string or null",
+      "total_numbers": number_or_null,
+      "foreign_currency": "amount CURRENCY or null",
+      "sterling_total": number_or_null,
+      "non_college_staff": boolean
+    }},
+    "other": {{
+      "date": "YYYY-MM-DD or null",
+      "expense_type": "valid type or null",
+      "description": "string or null",
+      "foreign_currency": "amount CURRENCY or null",
+      "sterling_total": number_or_null,
+      "is_non_uk_eu": boolean
+    }}
+  }}
+}}
+
+Apply the user's instruction to the appropriate fields. If changing sections, move relevant data to the new section."""
 
     messages = [{"role": "user", "content": prompt}]
 
     completion = await client.chat.completions.create(
         model=model,
         messages=messages,
-        max_tokens=1000,
+        max_tokens=1500,
         temperature=0.1,
     )
 

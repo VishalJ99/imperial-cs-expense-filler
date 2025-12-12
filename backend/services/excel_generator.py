@@ -29,45 +29,72 @@ def set_cell_value(ws, cell_ref: str, value):
 
 
 # Excel template row mappings and limits
-TRAVEL_ROWS = list(range(13, 19))  # Rows 13-18 for travel
+TRAVEL_ROWS = list(range(13, 19))  # Rows 13-18 for travel general
+MILEAGE_ROWS = list(range(23, 27))  # Rows 23-26 for car mileage
 HOSPITALITY_ROWS = list(range(32, 36))  # Rows 32-35 for hospitality
 OTHER_ROWS = list(range(41, 48))  # Rows 41-47 for other expenses
 
 MAX_TRAVEL = len(TRAVEL_ROWS)  # 6
+MAX_MILEAGE = len(MILEAGE_ROWS)  # 4
 MAX_HOSPITALITY = len(HOSPITALITY_ROWS)  # 4
 MAX_OTHER = len(OTHER_ROWS)  # 7
 
-# Map expense types to sections
-EXPENSE_SECTION_MAP = {
-    "AIR TRAVEL": "travel",
-    "RAIL": "travel",
-    "TAXI": "travel",
-    "CAR HIRE": "travel",
-    "CAR PARKING": "travel",
-    "OTHER": "travel",
-    "HOSPITALITY": "hospitality",
-    "HOTEL / SUBSISTENCE": "other",
-    "CONFERENCE FEES": "other",
-    "BOOKS": "other",
-    "LAB SUPPLIES": "other",
-    "SOFTWARE PURCHASES": "other",
-    "TRAINING / COURSE FEES": "other",
-    "EQUIPMENT PURCHASE": "other",
-    "MEMBERSHIP SUBS.": "other",
-    "OFFICE SUNDRIES": "other",
+# Map active_section values to Excel sections
+SECTION_TO_EXCEL = {
+    "travel_general": "travel",
+    "travel_mileage": "mileage",
+    "hospitality": "hospitality",
+    "other": "other",
 }
 
 
 def generate_expense_filename(parsed: dict, original_filename: str) -> str:
-    """Generate renamed filename based on parsed data."""
-    expense_type = parsed.get("expense_type", "OTHER").upper().replace(" ", "-").replace("/", "-")
-    date = parsed.get("date", "unknown")
-    vendor = parsed.get("vendor", "unknown")
-    amount = parsed.get("amount", 0)
-    currency = parsed.get("currency", "USD")
+    """Generate renamed filename based on parsed data (new field structure)."""
+    active_section = parsed.get("active_section", "other")
+    fields = parsed.get("fields", {})
+    section_data = fields.get(active_section, {})
+
+    # Determine expense type based on section
+    if active_section == "travel_general":
+        expense_type = section_data.get("mode", "TRAVEL")
+    elif active_section == "travel_mileage":
+        expense_type = "MILEAGE"
+    elif active_section == "hospitality":
+        expense_type = "HOSPITALITY"
+    else:
+        expense_type = section_data.get("expense_type", "OTHER")
+
+    expense_type = (expense_type or "OTHER").upper().replace(" ", "-").replace("/", "-")
+
+    # Get date from section data
+    date = section_data.get("date", "unknown") or "unknown"
+
+    # Get amount info - could be sterling_total or calculated from mileage
+    if active_section == "travel_mileage":
+        miles = section_data.get("miles", 0) or 0
+        cost_per_mile = section_data.get("cost_per_mile", 0) or 0
+        amount = round(miles * cost_per_mile, 2)
+        currency = "GBP"
+    else:
+        sterling_total = section_data.get("sterling_total", 0) or 0
+        foreign_currency = section_data.get("foreign_currency", "")
+        amount = sterling_total
+        currency = "GBP"
+
+    # Get description or location for vendor-like field
+    if active_section == "travel_general":
+        vendor = section_data.get("from_location", "") or section_data.get("to_location", "") or "travel"
+    elif active_section == "travel_mileage":
+        vendor = section_data.get("from_location", "") or section_data.get("to_location", "") or "mileage"
+    elif active_section == "hospitality":
+        vendor = section_data.get("principal_guest", "") or section_data.get("organisation", "") or "hospitality"
+    else:
+        vendor = section_data.get("description", "") or "expense"
 
     # Clean vendor name for filename
-    vendor_clean = re.sub(r"[^\w\s-]", "", vendor)[:20].strip().replace(" ", "-").lower()
+    vendor_clean = re.sub(r"[^\w\s-]", "", str(vendor))[:20].strip().replace(" ", "-").lower()
+    if not vendor_clean:
+        vendor_clean = "expense"
 
     # Get original extension
     ext = Path(original_filename).suffix.lower()
@@ -83,6 +110,7 @@ def fill_excel_template(
     """
     Fill the Excel template with header info and receipts.
     Returns the filled workbook as bytes.
+    Uses new type-specific field structure.
     """
     wb = load_workbook(template_path)
     ws = wb["Portrait"]
@@ -112,30 +140,39 @@ def fill_excel_template(
 
     # Track which rows we've used
     travel_idx = 0
+    mileage_idx = 0
     hospitality_idx = 0
     other_idx = 0
 
     for receipt in receipts:
         parsed = receipt.get("parsed", {})
-        expense_type = parsed.get("expense_type", "OTHER")
-        section = EXPENSE_SECTION_MAP.get(expense_type, "other")
+        active_section = parsed.get("active_section", "other")
+        fields = parsed.get("fields", {})
+        section_data = fields.get(active_section, {})
+        excel_section = SECTION_TO_EXCEL.get(active_section, "other")
 
-        if section == "travel":
+        if excel_section == "travel":
             if travel_idx < len(TRAVEL_ROWS):
                 row = TRAVEL_ROWS[travel_idx]
-                fill_travel_row(ws, row, parsed, expense_type, exchange_rate)
+                fill_travel_row(ws, row, section_data, exchange_rate)
                 travel_idx += 1
 
-        elif section == "hospitality":
+        elif excel_section == "mileage":
+            if mileage_idx < len(MILEAGE_ROWS):
+                row = MILEAGE_ROWS[mileage_idx]
+                fill_mileage_row(ws, row, section_data)
+                mileage_idx += 1
+
+        elif excel_section == "hospitality":
             if hospitality_idx < len(HOSPITALITY_ROWS):
                 row = HOSPITALITY_ROWS[hospitality_idx]
-                fill_hospitality_row(ws, row, parsed, exchange_rate)
+                fill_hospitality_row(ws, row, section_data, exchange_rate)
                 hospitality_idx += 1
 
         else:  # other
             if other_idx < len(OTHER_ROWS):
                 row = OTHER_ROWS[other_idx]
-                fill_other_row(ws, row, parsed, expense_type, exchange_rate)
+                fill_other_row(ws, row, section_data, exchange_rate)
                 other_idx += 1
 
     # Save to bytes
@@ -145,90 +182,114 @@ def fill_excel_template(
     return buffer.read()
 
 
-def fill_travel_row(ws, row: int, parsed: dict, expense_type: str, exchange_rate: float = 1.0):
-    """Fill a travel section row."""
-    set_cell_value(ws, f"C{row}", parsed.get("date", ""))
-    set_cell_value(ws, f"D{row}", expense_type)  # Mode dropdown
-    set_cell_value(ws, f"E{row}", "")  # Return? - leave blank
-    set_cell_value(ws, f"F{row}", parsed.get("vendor", ""))  # From
-    set_cell_value(ws, f"G{row}", parsed.get("description", "")[:30])  # To (truncated)
+def fill_travel_row(ws, row: int, section_data: dict, exchange_rate: float = 1.0):
+    """Fill a travel general section row using new field structure."""
+    set_cell_value(ws, f"C{row}", section_data.get("date") or "")
+    set_cell_value(ws, f"D{row}", section_data.get("mode") or "")  # Mode dropdown
+    set_cell_value(ws, f"E{row}", "Yes" if section_data.get("is_return") else "")  # Return?
+    set_cell_value(ws, f"F{row}", section_data.get("from_location") or "")  # From
+    to_loc = section_data.get("to_location") or ""
+    set_cell_value(ws, f"G{row}", to_loc[:30] if to_loc else "")  # To (truncated)
 
     # Currency handling
-    currency = parsed.get("currency", "USD")
-    amount = parsed.get("amount", 0)
-    if currency != "GBP":
-        set_cell_value(ws, f"I{row}", f"{amount} {currency}")  # Foreign column
-        gbp_amount = round(amount * exchange_rate, 2)
-        set_cell_value(ws, f"J{row}", gbp_amount)  # Sterling total (converted)
+    foreign_currency = section_data.get("foreign_currency")  # e.g., "50.00 USD" or None
+    sterling_total = section_data.get("sterling_total") or 0
+
+    if foreign_currency:
+        set_cell_value(ws, f"I{row}", foreign_currency)  # Foreign column
+        set_cell_value(ws, f"J{row}", sterling_total)  # Sterling total
     else:
-        set_cell_value(ws, f"J{row}", amount)  # Sterling total
+        set_cell_value(ws, f"J{row}", sterling_total)  # Sterling total only
 
     # Non UK/EU checkbox (column K)
-    if parsed.get("is_non_uk_eu", False):
+    if section_data.get("is_non_uk_eu", False):
         set_cell_value(ws, f"K{row}", True)
 
 
-def fill_hospitality_row(ws, row: int, parsed: dict, exchange_rate: float = 1.0):
-    """Fill a hospitality section row."""
-    set_cell_value(ws, f"C{row}", parsed.get("date", ""))
-    set_cell_value(ws, f"D{row}", parsed.get("vendor", ""))  # Name of principal guest
-    set_cell_value(ws, f"E{row}", parsed.get("description", "")[:40])  # Organisation/description
-    set_cell_value(ws, f"G{row}", parsed.get("guest_count", 1))  # Total numbers present
+def fill_hospitality_row(ws, row: int, section_data: dict, exchange_rate: float = 1.0):
+    """Fill a hospitality section row using new field structure."""
+    set_cell_value(ws, f"C{row}", section_data.get("date") or "")
+    set_cell_value(ws, f"D{row}", section_data.get("principal_guest") or "")  # Name of principal guest
+    org = section_data.get("organisation") or ""
+    set_cell_value(ws, f"E{row}", org[:40] if org else "")  # Organisation (truncated)
+    set_cell_value(ws, f"G{row}", section_data.get("total_numbers") or 1)  # Total numbers present
 
     # Currency handling
-    currency = parsed.get("currency", "USD")
-    amount = parsed.get("amount", 0)
-    if currency != "GBP":
-        set_cell_value(ws, f"I{row}", f"{amount} {currency}")  # Foreign column
-        gbp_amount = round(amount * exchange_rate, 2)
-        set_cell_value(ws, f"J{row}", gbp_amount)  # Sterling total (converted)
+    foreign_currency = section_data.get("foreign_currency")
+    sterling_total = section_data.get("sterling_total") or 0
+
+    if foreign_currency:
+        set_cell_value(ws, f"I{row}", foreign_currency)  # Foreign column
+        set_cell_value(ws, f"J{row}", sterling_total)  # Sterling total
     else:
-        set_cell_value(ws, f"J{row}", amount)
+        set_cell_value(ws, f"J{row}", sterling_total)
 
     # Non-college staff present checkbox
-    if parsed.get("is_group_expense"):
+    if section_data.get("non_college_staff", False):
         set_cell_value(ws, f"K{row}", True)
 
 
-def fill_other_row(ws, row: int, parsed: dict, expense_type: str, exchange_rate: float = 1.0):
-    """Fill a subsistence/other section row."""
-    set_cell_value(ws, f"C{row}", parsed.get("date", ""))
-    set_cell_value(ws, f"D{row}", expense_type)  # Expense type dropdown
-    set_cell_value(ws, f"E{row}", parsed.get("description", "")[:50])  # Description
+def fill_other_row(ws, row: int, section_data: dict, exchange_rate: float = 1.0):
+    """Fill a subsistence/other section row using new field structure."""
+    set_cell_value(ws, f"C{row}", section_data.get("date") or "")
+    set_cell_value(ws, f"D{row}", section_data.get("expense_type") or "")  # Expense type dropdown
+    desc = section_data.get("description") or ""
+    set_cell_value(ws, f"E{row}", desc[:50] if desc else "")  # Description (truncated)
 
     # Currency handling
-    currency = parsed.get("currency", "USD")
-    amount = parsed.get("amount", 0)
-    if currency != "GBP":
-        set_cell_value(ws, f"I{row}", f"{amount} {currency}")  # Foreign column
-        gbp_amount = round(amount * exchange_rate, 2)
-        set_cell_value(ws, f"J{row}", gbp_amount)  # Sterling total (converted)
+    foreign_currency = section_data.get("foreign_currency")
+    sterling_total = section_data.get("sterling_total") or 0
+
+    if foreign_currency:
+        set_cell_value(ws, f"I{row}", foreign_currency)  # Foreign column
+        set_cell_value(ws, f"J{row}", sterling_total)  # Sterling total
     else:
-        set_cell_value(ws, f"J{row}", amount)
+        set_cell_value(ws, f"J{row}", sterling_total)
 
     # Non UK/EU checkbox (column K)
-    if parsed.get("is_non_uk_eu", False):
+    if section_data.get("is_non_uk_eu", False):
         set_cell_value(ws, f"K{row}", True)
+
+
+def fill_mileage_row(ws, row: int, section_data: dict):
+    """Fill a car mileage section row using new field structure."""
+    set_cell_value(ws, f"C{row}", section_data.get("date") or "")
+    set_cell_value(ws, f"D{row}", section_data.get("miles") or "")  # Number of miles
+    set_cell_value(ws, f"E{row}", "Yes" if section_data.get("is_return") else "")  # Return?
+    set_cell_value(ws, f"F{row}", section_data.get("from_location") or "")  # From
+    set_cell_value(ws, f"G{row}", section_data.get("to_location") or "")  # To
+    set_cell_value(ws, f"H{row}", section_data.get("cost_per_mile") or "")  # Cost per mile
+
+    # Calculate total (miles * cost_per_mile) for column J
+    miles = section_data.get("miles") or 0
+    cost_per_mile = section_data.get("cost_per_mile") or 0
+    if miles and cost_per_mile:
+        total = round(miles * cost_per_mile, 2)
+        set_cell_value(ws, f"J{row}", total)
 
 
 def split_into_batches(receipts: List[dict]) -> List[List[dict]]:
     """
     Split receipts into batches that fit within Excel template row limits.
-    Each batch respects: MAX_TRAVEL=6, MAX_HOSPITALITY=4, MAX_OTHER=7
+    Each batch respects: MAX_TRAVEL=6, MAX_MILEAGE=4, MAX_HOSPITALITY=4, MAX_OTHER=7
+    Uses new active_section field structure.
     """
     # Group receipts by section
     travel = []
+    mileage = []
     hospitality = []
     other = []
 
     for receipt in receipts:
         parsed = receipt.get("parsed", {})
-        expense_type = parsed.get("expense_type", "OTHER")
-        section = EXPENSE_SECTION_MAP.get(expense_type, "other")
+        active_section = parsed.get("active_section", "other")
+        excel_section = SECTION_TO_EXCEL.get(active_section, "other")
 
-        if section == "travel":
+        if excel_section == "travel":
             travel.append(receipt)
-        elif section == "hospitality":
+        elif excel_section == "mileage":
+            mileage.append(receipt)
+        elif excel_section == "hospitality":
             hospitality.append(receipt)
         else:
             other.append(receipt)
@@ -237,6 +298,7 @@ def split_into_batches(receipts: List[dict]) -> List[List[dict]]:
     num_batches = max(
         1,
         (len(travel) + MAX_TRAVEL - 1) // MAX_TRAVEL if travel else 1,
+        (len(mileage) + MAX_MILEAGE - 1) // MAX_MILEAGE if mileage else 1,
         (len(hospitality) + MAX_HOSPITALITY - 1) // MAX_HOSPITALITY if hospitality else 1,
         (len(other) + MAX_OTHER - 1) // MAX_OTHER if other else 1,
     )
@@ -246,6 +308,11 @@ def split_into_batches(receipts: List[dict]) -> List[List[dict]]:
 
     for i, receipt in enumerate(travel):
         batch_idx = i // MAX_TRAVEL
+        if batch_idx < num_batches:
+            batches[batch_idx].append(receipt)
+
+    for i, receipt in enumerate(mileage):
+        batch_idx = i // MAX_MILEAGE
         if batch_idx < num_batches:
             batches[batch_idx].append(receipt)
 

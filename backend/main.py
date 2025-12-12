@@ -138,6 +138,7 @@ class HeaderInfo(BaseModel):
     bank_branch: str = ""
     sort_code: str = ""
     account_number: str = ""
+    exchange_rate: float = 1.0  # For converting foreign currency to GBP
 
 
 class ReceiptData(BaseModel):
