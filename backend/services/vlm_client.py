@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from typing import Optional
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -76,6 +77,9 @@ def get_client():
 
 async def parse_receipt_image(image_base64: str, model: str) -> dict:
     """Send image to VLM and get structured receipt data."""
+    print(f"[VLM] Starting image parse with model: {model}")
+    start = time.time()
+
     client = get_client()
 
     messages = [
@@ -91,6 +95,7 @@ async def parse_receipt_image(image_base64: str, model: str) -> dict:
         }
     ]
 
+    print(f"[VLM] Sending request to OpenRouter...")
     completion = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -98,7 +103,15 @@ async def parse_receipt_image(image_base64: str, model: str) -> dict:
         temperature=0.1,
     )
 
+    elapsed = time.time() - start
+    print(f"[VLM] Raw response: {completion}")
+
+    if not completion.choices:
+        raise ValueError(f"OpenRouter returned empty response. Check API key/credits. Response: {completion}")
+
     content = completion.choices[0].message.content
+    print(f"[VLM] Response received in {elapsed:.1f}s: {content[:200]}...")
+
     return extract_json(content)
 
 

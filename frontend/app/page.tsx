@@ -69,6 +69,7 @@ export default function Home() {
     }
   })
   const [processing, setProcessing] = useState(false)
+  const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 })
   const [generating, setGenerating] = useState(false)
 
   // Fetch available models
@@ -107,54 +108,103 @@ export default function Home() {
 
   const processAllReceipts = async () => {
     setProcessing(true)
+    const toProcess = receipts
+      .map((r, idx) => ({ receipt: r as Receipt & { file?: File }, idx }))
+      .filter(({ receipt }) => !receipt.parsed && receipt.file)
 
-    for (let i = 0; i < receipts.length; i++) {
-      const receipt = receipts[i] as Receipt & { file?: File }
-      if (receipt.parsed || !receipt.file) continue
+    setProcessingProgress({ current: 0, total: toProcess.length })
+
+    // Mark all as processing
+    setReceipts((prev) =>
+      prev.map((r, idx) => {
+        const isProcessing = toProcess.some((p) => p.idx === idx)
+        return isProcessing ? { ...r, processing: true } : r
+      })
+    )
+
+    let completed = 0
+    const MAX_RETRIES = 3
+
+    // Helper to process one receipt with retries
+    const processOne = async (receipt: Receipt & { file?: File }, idx: number) => {
+      let lastError: Error | null = null
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const formData = new FormData()
+          formData.append('file', receipt.file!)
+          formData.append('mode', 'image')
+          formData.append('model', selectedModel)
+
+          const res = await fetch(`${API_URL}/api/parse-receipt`, {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+          const data = await res.json()
+
+          // Success - update receipt
+          setReceipts((prev) =>
+            prev.map((r, i) =>
+              i === idx
+                ? {
+                    ...r,
+                    image_base64: data.image_base64,
+                    thumbnail_base64: data.thumbnail_base64,
+                    parsed: data.parsed,
+                    processing: false,
+                    error: null,
+                  }
+                : r
+            )
+          )
+          return // Success, exit retry loop
+        } catch (error) {
+          lastError = error as Error
+          console.log(`Receipt ${idx} attempt ${attempt}/${MAX_RETRIES} failed:`, error)
+          if (attempt < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, 1000)) // Wait 1s before retry
+          }
+        }
+      }
+
+      // All retries failed - create placeholder for manual entry
+      const emptyParsed: ParsedReceipt = {
+        expense_type: 'OTHER',
+        amount: 0,
+        currency: 'USD',
+        date: new Date().toISOString().split('T')[0],
+        vendor: 'Unknown',
+        description: 'Failed to parse after 3 attempts - please fill manually',
+        guest_count: null,
+        is_group_expense: false,
+        confidence: 'low',
+      }
 
       setReceipts((prev) =>
-        prev.map((r, idx) => (idx === i ? { ...r, processing: true } : r))
+        prev.map((r, i) =>
+          i === idx
+            ? {
+                ...r,
+                parsed: emptyParsed,
+                processing: false,
+                error: `Failed after ${MAX_RETRIES} attempts: ${lastError?.message}`,
+              }
+            : r
+        )
       )
-
-      try {
-        const formData = new FormData()
-        formData.append('file', receipt.file)
-        formData.append('mode', 'image')
-        formData.append('model', selectedModel)
-
-        const res = await fetch(`${API_URL}/api/parse-receipt`, {
-          method: 'POST',
-          body: formData,
-        })
-
-        if (!res.ok) throw new Error('Failed to process receipt')
-
-        const data = await res.json()
-
-        setReceipts((prev) =>
-          prev.map((r, idx) =>
-            idx === i
-              ? {
-                  ...r,
-                  image_base64: data.image_base64,
-                  thumbnail_base64: data.thumbnail_base64,
-                  parsed: data.parsed,
-                  processing: false,
-                  error: null,
-                }
-              : r
-          )
-        )
-      } catch (error) {
-        setReceipts((prev) =>
-          prev.map((r, idx) =>
-            idx === i
-              ? { ...r, processing: false, error: (error as Error).message }
-              : r
-          )
-        )
-      }
     }
+
+    // Process all in parallel
+    const promises = toProcess.map(async ({ receipt, idx }) => {
+      await processOne(receipt, idx)
+      completed++
+      setProcessingProgress({ current: completed, total: toProcess.length })
+    })
+
+    await Promise.all(promises)
 
     setProcessing(false)
     setAppState('review')
@@ -300,13 +350,33 @@ export default function Home() {
                   ))}
                 </div>
 
-                <button
-                  onClick={processAllReceipts}
-                  disabled={processing}
-                  className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400"
-                >
-                  {processing ? 'Processing...' : 'Process All Receipts'}
-                </button>
+                {processing ? (
+                  <div className="w-full">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">
+                        Processing receipts...
+                      </span>
+                      <span className="text-sm text-gray-600">
+                        {processingProgress.current}/{processingProgress.total}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div
+                        className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${processingProgress.total > 0 ? (processingProgress.current / processingProgress.total) * 100 : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={processAllReceipts}
+                    className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700"
+                  >
+                    Process All Receipts
+                  </button>
+                )}
               </div>
             )}
           </>

@@ -6,6 +6,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import List, Optional
 import json
+import traceback
 
 from dotenv import load_dotenv
 
@@ -31,9 +32,10 @@ TEMPLATE_PATH = Path(__file__).parent.parent / "YourSurname_E1-Nonemployee-expen
 
 
 # Available VLM models
-DEFAULT_MODEL = "qwen/qwen3-vl-235b-a22b-instruct"
+DEFAULT_MODEL = "qwen/qwen3-vl-8b-instruct"
 AVAILABLE_MODELS = [
-    {"id": "qwen/qwen3-vl-235b-a22b-instruct", "name": "Qwen3 VL 235B (Recommended)"},
+    {"id": "qwen/qwen3-vl-8b-instruct", "name": "Qwen3 VL 8B (Fast, Recommended)"},
+    {"id": "qwen/qwen3-vl-235b-a22b-instruct", "name": "Qwen3 VL 235B (Slow)"},
     {"id": "google/gemini-2.0-flash-exp:free", "name": "Gemini 2.0 Flash (Free)"},
     {"id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet"},
     {"id": "openai/gpt-4o", "name": "GPT-4o"},
@@ -89,6 +91,7 @@ async def parse_receipt(
         }
 
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(500, f"Error processing receipt: {str(e)}")
 
 
@@ -111,7 +114,7 @@ async def reparse_receipt(
     try:
         original = json.loads(original_data) if original_data else None
 
-        if mode == "image" and image_base64:
+        if mode == "image":
             # Re-analyze image with user's context
             parsed = await refine_receipt(user_text, original, model)
         else:
@@ -121,6 +124,7 @@ async def reparse_receipt(
         return {"parsed": parsed}
 
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(500, f"Error re-parsing: {str(e)}")
 
 
@@ -177,6 +181,7 @@ async def generate_output(request: GenerateRequest):
         )
 
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(500, f"Error generating output: {str(e)}")
 
 

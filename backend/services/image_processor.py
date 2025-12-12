@@ -48,35 +48,33 @@ def convert_image_to_png_base64(file_bytes: bytes) -> str:
 
 def convert_pdf_to_png_base64(file_bytes: bytes) -> str:
     """Convert first page of PDF to PNG base64."""
-    try:
-        from pdf2image import convert_from_bytes
+    import fitz  # pymupdf
 
-        # Convert first page only
-        images = convert_from_bytes(file_bytes, first_page=1, last_page=1, dpi=150)
+    # Open PDF from bytes
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+    page = doc[0]  # First page
 
-        if not images:
-            raise ValueError("Could not extract images from PDF")
+    # Render to image (150 DPI)
+    mat = fitz.Matrix(150/72, 150/72)
+    pix = page.get_pixmap(matrix=mat)
 
-        img = images[0]
+    # Convert to PIL Image
+    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-        # Resize if too large
-        max_size = 2048
-        if max(img.size) > max_size:
-            ratio = max_size / max(img.size)
-            new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-            img = img.resize(new_size, Image.Resampling.LANCZOS)
+    # Resize if too large
+    max_size = 2048
+    if max(img.size) > max_size:
+        ratio = max_size / max(img.size)
+        new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
 
-        # Save to PNG bytes
-        buffer = io.BytesIO()
-        img.save(buffer, format="PNG", optimize=True)
-        buffer.seek(0)
+    # Save to PNG bytes
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG", optimize=True)
+    buffer.seek(0)
 
-        return base64.b64encode(buffer.read()).decode("utf-8")
-
-    except ImportError:
-        raise ImportError(
-            "pdf2image requires poppler. Install with: brew install poppler (macOS)"
-        )
+    doc.close()
+    return base64.b64encode(buffer.read()).decode("utf-8")
 
 
 def get_image_thumbnail_base64(image_base64: str, size: tuple = (200, 200)) -> str:
