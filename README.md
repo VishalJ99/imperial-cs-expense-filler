@@ -18,7 +18,8 @@ A web app that uses Vision Language Models (VLMs) to automatically parse receipt
 
 ```bash
 # Clone and enter directory
-cd nips25-expenses
+git clone git@github.com:VishalJ99/imperial-cs-expense-filler.git
+cd imperial-cs-expense-filler
 
 # Create .env with your OpenRouter API key
 echo "OPENROUTER_API_KEY=sk-or-v1-your-key-here" > .env
