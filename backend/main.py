@@ -102,6 +102,7 @@ async def reparse_receipt(
     user_text: str = Form(...),
     original_data: Optional[str] = Form(None),
     image_base64: Optional[str] = Form(None),
+    chat_history: Optional[str] = Form(None),
 ):
     """
     Re-parse receipt with user's text input.
@@ -109,14 +110,20 @@ async def reparse_receipt(
     - mode: "image" to re-analyze image with context, "text" to parse from text only
     - user_text: User's correction or description
     - original_data: JSON string of previous parsed data (optional)
-    - image_base64: Original image (only used if mode="image")
+    - image_base64: Original image for VLM context
+    - chat_history: JSON string of previous chat messages
     """
     try:
         original = json.loads(original_data) if original_data else None
+        history = json.loads(chat_history) if chat_history else None
 
         if mode == "image":
-            # Re-analyze image with user's context
-            parsed = await refine_receipt(user_text, original, model)
+            # Re-analyze with image, current data, and chat history
+            parsed = await refine_receipt(
+                user_text, original, model,
+                image_base64=image_base64,
+                chat_history=history
+            )
         else:
             # Parse from text only
             parsed = await parse_receipt_text(user_text, model)
@@ -139,6 +146,7 @@ class HeaderInfo(BaseModel):
     sort_code: str = ""
     account_number: str = ""
     exchange_rate: float = 1.0  # For converting foreign currency to GBP
+    purpose: str = ""  # Purpose of claim (C6)
 
 
 class ReceiptData(BaseModel):

@@ -39,6 +39,17 @@ export default function HeaderForm({ headerInfo, onChange }: Props) {
       </div>
 
       <div>
+        <label className="block text-xs text-gray-500 mb-1">Purpose of Claim</label>
+        <input
+          type="text"
+          value={headerInfo.purpose}
+          onChange={(e) => update('purpose', e.target.value)}
+          className="w-full px-2 py-1.5 border rounded text-sm"
+          placeholder="e.g. NeurIPS 2025 Conference"
+        />
+      </div>
+
+      <div>
         <label className="block text-xs text-gray-500 mb-1">Date of Birth</label>
         <input
           type="date"

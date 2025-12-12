@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Receipt, ParsedReceipt, ActiveSection, TypeSpecificFields } from '@/lib/types'
+import { Receipt, ParsedReceipt, ActiveSection, TypeSpecificFields, createEmptyFields } from '@/lib/types'
 import ImageModal from './ImageModal'
 
 // Dropdown options
@@ -157,6 +157,15 @@ export default function ReceiptReview({
   const receipt = receipts[currentIndex]
   const parsed = receipt?.parsed
 
+  // Merge parsed fields with empty defaults for null-safety
+  const emptyFields = createEmptyFields()
+  const fields = parsed ? {
+    travel_general: { ...emptyFields.travel_general, ...parsed.fields?.travel_general },
+    travel_mileage: { ...emptyFields.travel_mileage, ...parsed.fields?.travel_mileage },
+    hospitality: { ...emptyFields.hospitality, ...parsed.fields?.hospitality },
+    other: { ...emptyFields.other, ...parsed.fields?.other },
+  } : emptyFields
+
   // Update expanded sections when active section changes
   useEffect(() => {
     if (parsed) {
@@ -189,9 +198,9 @@ export default function ReceiptReview({
     const newParsed: ParsedReceipt = {
       ...parsed,
       fields: {
-        ...parsed.fields,
+        ...fields,
         [section]: {
-          ...parsed.fields[section],
+          ...fields[section],
           [field]: value,
         },
       },
@@ -275,7 +284,7 @@ export default function ReceiptReview({
         </div>
 
         {/* Type-specific sections */}
-        <div className="flex-1 space-y-2 max-h-[500px] overflow-y-auto">
+        <div className="flex-1 space-y-2 max-h-[700px] overflow-y-auto">
           {/* Error display */}
           {receipt.error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
@@ -309,7 +318,7 @@ export default function ReceiptReview({
                     <div className="grid grid-cols-3 gap-3">
                       <Field
                         label="Date"
-                        value={parsed.fields.travel_general.date}
+                        value={fields.travel_general.date}
                         onChange={(v) => updateField('travel_general', 'date', v as string)}
                         placeholder="YYYY-MM-DD"
                       />
@@ -317,45 +326,45 @@ export default function ReceiptReview({
                         label="Mode"
                         type="select"
                         options={TRAVEL_MODES}
-                        value={parsed.fields.travel_general.mode}
+                        value={fields.travel_general.mode}
                         onChange={(v) => updateField('travel_general', 'mode', v as string)}
                       />
                       <Field
                         label="Return?"
                         type="checkbox"
-                        value={parsed.fields.travel_general.is_return}
+                        value={fields.travel_general.is_return}
                         onChange={(v) => updateField('travel_general', 'is_return', v as boolean)}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <Field
                         label="From"
-                        value={parsed.fields.travel_general.from_location}
+                        value={fields.travel_general.from_location}
                         onChange={(v) => updateField('travel_general', 'from_location', v as string)}
                       />
                       <Field
                         label="To"
-                        value={parsed.fields.travel_general.to_location}
+                        value={fields.travel_general.to_location}
                         onChange={(v) => updateField('travel_general', 'to_location', v as string)}
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                       <Field
                         label="Foreign Currency"
-                        value={parsed.fields.travel_general.foreign_currency}
+                        value={fields.travel_general.foreign_currency}
                         onChange={(v) => updateField('travel_general', 'foreign_currency', v as string)}
                         placeholder="e.g. 50.00 USD"
                       />
                       <Field
                         label="Sterling Total (£)"
                         type="number"
-                        value={parsed.fields.travel_general.sterling_total}
+                        value={fields.travel_general.sterling_total}
                         onChange={(v) => updateField('travel_general', 'sterling_total', v as number)}
                       />
                       <Field
                         label="Non UK/EU"
                         type="checkbox"
-                        value={parsed.fields.travel_general.is_non_uk_eu}
+                        value={fields.travel_general.is_non_uk_eu}
                         onChange={(v) => updateField('travel_general', 'is_non_uk_eu', v as boolean)}
                       />
                     </div>
@@ -376,38 +385,38 @@ export default function ReceiptReview({
                     <div className="grid grid-cols-3 gap-3">
                       <Field
                         label="Date"
-                        value={parsed.fields.travel_mileage.date}
+                        value={fields.travel_mileage.date}
                         onChange={(v) => updateField('travel_mileage', 'date', v as string)}
                         placeholder="YYYY-MM-DD"
                       />
                       <Field
                         label="Number of Miles"
                         type="number"
-                        value={parsed.fields.travel_mileage.miles}
+                        value={fields.travel_mileage.miles}
                         onChange={(v) => updateField('travel_mileage', 'miles', v as number)}
                       />
                       <Field
                         label="Return?"
                         type="checkbox"
-                        value={parsed.fields.travel_mileage.is_return}
+                        value={fields.travel_mileage.is_return}
                         onChange={(v) => updateField('travel_mileage', 'is_return', v as boolean)}
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                       <Field
                         label="From"
-                        value={parsed.fields.travel_mileage.from_location}
+                        value={fields.travel_mileage.from_location}
                         onChange={(v) => updateField('travel_mileage', 'from_location', v as string)}
                       />
                       <Field
                         label="To"
-                        value={parsed.fields.travel_mileage.to_location}
+                        value={fields.travel_mileage.to_location}
                         onChange={(v) => updateField('travel_mileage', 'to_location', v as string)}
                       />
                       <Field
                         label="Cost per Mile (£)"
                         type="number"
-                        value={parsed.fields.travel_mileage.cost_per_mile}
+                        value={fields.travel_mileage.cost_per_mile}
                         onChange={(v) => updateField('travel_mileage', 'cost_per_mile', v as number)}
                       />
                     </div>
@@ -428,46 +437,46 @@ export default function ReceiptReview({
                     <div className="grid grid-cols-2 gap-3">
                       <Field
                         label="Date"
-                        value={parsed.fields.hospitality.date}
+                        value={fields.hospitality.date}
                         onChange={(v) => updateField('hospitality', 'date', v as string)}
                         placeholder="YYYY-MM-DD"
                       />
                       <Field
                         label="Principal Guest"
-                        value={parsed.fields.hospitality.principal_guest}
+                        value={fields.hospitality.principal_guest}
                         onChange={(v) => updateField('hospitality', 'principal_guest', v as string)}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <Field
                         label="Organisation"
-                        value={parsed.fields.hospitality.organisation}
+                        value={fields.hospitality.organisation}
                         onChange={(v) => updateField('hospitality', 'organisation', v as string)}
                       />
                       <Field
                         label="Total Numbers Present"
                         type="number"
-                        value={parsed.fields.hospitality.total_numbers}
+                        value={fields.hospitality.total_numbers}
                         onChange={(v) => updateField('hospitality', 'total_numbers', v as number)}
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                       <Field
                         label="Foreign Currency"
-                        value={parsed.fields.hospitality.foreign_currency}
+                        value={fields.hospitality.foreign_currency}
                         onChange={(v) => updateField('hospitality', 'foreign_currency', v as string)}
                         placeholder="e.g. 100.00 EUR"
                       />
                       <Field
                         label="Sterling Total (£)"
                         type="number"
-                        value={parsed.fields.hospitality.sterling_total}
+                        value={fields.hospitality.sterling_total}
                         onChange={(v) => updateField('hospitality', 'sterling_total', v as number)}
                       />
                       <Field
                         label="Non-college Staff"
                         type="checkbox"
-                        value={parsed.fields.hospitality.non_college_staff}
+                        value={fields.hospitality.non_college_staff}
                         onChange={(v) => updateField('hospitality', 'non_college_staff', v as boolean)}
                       />
                     </div>
@@ -488,7 +497,7 @@ export default function ReceiptReview({
                     <div className="grid grid-cols-2 gap-3">
                       <Field
                         label="Date"
-                        value={parsed.fields.other.date}
+                        value={fields.other.date}
                         onChange={(v) => updateField('other', 'date', v as string)}
                         placeholder="YYYY-MM-DD"
                       />
@@ -496,32 +505,32 @@ export default function ReceiptReview({
                         label="Expense Type"
                         type="select"
                         options={OTHER_EXPENSE_TYPES}
-                        value={parsed.fields.other.expense_type}
+                        value={fields.other.expense_type}
                         onChange={(v) => updateField('other', 'expense_type', v as string)}
                       />
                     </div>
                     <Field
                       label="Description"
-                      value={parsed.fields.other.description}
+                      value={fields.other.description}
                       onChange={(v) => updateField('other', 'description', v as string)}
                     />
                     <div className="grid grid-cols-3 gap-3">
                       <Field
                         label="Foreign Currency"
-                        value={parsed.fields.other.foreign_currency}
+                        value={fields.other.foreign_currency}
                         onChange={(v) => updateField('other', 'foreign_currency', v as string)}
                         placeholder="e.g. 50.00 USD"
                       />
                       <Field
                         label="Sterling Total (£)"
                         type="number"
-                        value={parsed.fields.other.sterling_total}
+                        value={fields.other.sterling_total}
                         onChange={(v) => updateField('other', 'sterling_total', v as number)}
                       />
                       <Field
                         label="Non UK/EU"
                         type="checkbox"
-                        value={parsed.fields.other.is_non_uk_eu}
+                        value={fields.other.is_non_uk_eu}
                         onChange={(v) => updateField('other', 'is_non_uk_eu', v as boolean)}
                       />
                     </div>

@@ -46,6 +46,7 @@ export default function Home() {
       account_number: '',
       foreign_currency: 'USD',
       exchange_rate: '0.79',
+      purpose: '',
     }
   })
   const [processing, setProcessing] = useState(false)
@@ -80,6 +81,7 @@ export default function Home() {
       approved: false,
       processing: false,
       error: null,
+      chat_history: [],
       file,
     })) as (Receipt & { file: File })[]
 
@@ -210,6 +212,12 @@ export default function Home() {
       if (receipt.parsed) {
         formData.append('original_data', JSON.stringify(receipt.parsed))
       }
+      if (receipt.image_base64) {
+        formData.append('image_base64', receipt.image_base64)
+      }
+      if (receipt.chat_history.length > 0) {
+        formData.append('chat_history', JSON.stringify(receipt.chat_history))
+      }
 
       const res = await fetch(`${API_URL}/api/reparse`, {
         method: 'POST',
@@ -220,10 +228,21 @@ export default function Home() {
 
       const data = await res.json()
 
+      // Update receipt with new parsed data and append to chat history
       setReceipts((prev) =>
         prev.map((r, idx) =>
           idx === index
-            ? { ...r, parsed: data.parsed, processing: false, error: null }
+            ? {
+                ...r,
+                parsed: data.parsed,
+                processing: false,
+                error: null,
+                chat_history: [
+                  ...r.chat_history,
+                  { role: 'user' as const, content: userText },
+                  { role: 'assistant' as const, content: data.parsed.raw_description || 'Updated' },
+                ],
+              }
             : r
         )
       )

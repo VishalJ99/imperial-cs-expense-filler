@@ -48,6 +48,11 @@ export interface TypeSpecificFields {
 
 export type ActiveSection = 'travel_general' | 'travel_mileage' | 'hospitality' | 'other'
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface ParsedReceipt {
   active_section: ActiveSection
   confidence: string
@@ -64,6 +69,7 @@ export interface Receipt {
   approved: boolean
   processing: boolean
   error: string | null
+  chat_history: ChatMessage[]
 }
 
 export interface HeaderInfo {
@@ -78,6 +84,7 @@ export interface HeaderInfo {
   account_number: string
   foreign_currency: string
   exchange_rate: string
+  purpose: string
 }
 
 // Helper to create empty field structure

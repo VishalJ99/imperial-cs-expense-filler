@@ -134,6 +134,13 @@ def fill_excel_template(
         set_cell_value(ws, "K7", header_info["sort_code"])
     if header_info.get("account_number"):
         set_cell_value(ws, "K9", header_info["account_number"])
+    if header_info.get("purpose"):
+        set_cell_value(ws, "C6", header_info["purpose"])
+
+    # Auto-fill signature section
+    if header_info.get("name"):
+        set_cell_value(ws, "J63", header_info["name"])  # Claimant signature
+    set_cell_value(ws, "N63", datetime.now().strftime("%Y-%m-%d"))  # Today's date
 
     # Get exchange rate from header info
     exchange_rate = float(header_info.get("exchange_rate", 1.0))

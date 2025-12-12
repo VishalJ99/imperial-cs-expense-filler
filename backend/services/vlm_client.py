@@ -277,30 +277,38 @@ async def parse_receipt_text(user_text: str, model: str) -> dict:
 
 
 async def refine_receipt(
-    user_text: str, original_data: Optional[dict], model: str
+    user_text: str,
+    original_data: Optional[dict],
+    model: str,
+    image_base64: Optional[str] = None,
+    chat_history: Optional[list] = None,
 ) -> dict:
-    """Refine receipt data based on user feedback (VLM chat for complex operations)."""
+    """Refine receipt data based on user feedback (VLM chat for complex operations).
+
+    Args:
+        user_text: User's instruction
+        original_data: Current parsed data
+        model: Model to use
+        image_base64: Original receipt image (for context)
+        chat_history: Previous chat messages [{"role": "user"|"assistant", "content": "..."}]
+    """
     client = get_client()
 
-    context = ""
-    if original_data:
-        context = f"Current expense data: {json.dumps(original_data)}\n\n"
+    system_prompt = """You are helping refine expense receipt data. The user will provide instructions to modify the data.
 
-    prompt = f"""{context}User's instruction: "{user_text}"
-
-The user wants to modify the expense data. This could be:
+This could be:
 - Changing the expense type/section
 - Mathematical operations (e.g., "divide by 6 for shared bill")
 - Correcting field values
 - Adding missing information
 
-Return the UPDATED expense data in this JSON structure:
-{{
+Always return the UPDATED expense data in this JSON structure:
+{
   "active_section": "travel_general" | "travel_mileage" | "hospitality" | "other",
   "confidence": "high",
   "raw_description": "updated description",
-  "fields": {{
-    "travel_general": {{
+  "fields": {
+    "travel_general": {
       "date": "YYYY-MM-DD or null",
       "mode": "AIR TRAVEL|RAIL|TAXI|CAR HIRE|CAR PARKING|OTHER or null",
       "is_return": boolean,
@@ -309,16 +317,16 @@ Return the UPDATED expense data in this JSON structure:
       "foreign_currency": "amount CURRENCY or null",
       "sterling_total": number_or_null,
       "is_non_uk_eu": boolean
-    }},
-    "travel_mileage": {{
+    },
+    "travel_mileage": {
       "date": "YYYY-MM-DD or null",
       "miles": number_or_null,
       "is_return": boolean,
       "from_location": "string or null",
       "to_location": "string or null",
       "cost_per_mile": number_or_null
-    }},
-    "hospitality": {{
+    },
+    "hospitality": {
       "date": "YYYY-MM-DD or null",
       "principal_guest": "string or null",
       "organisation": "string or null",
@@ -326,21 +334,44 @@ Return the UPDATED expense data in this JSON structure:
       "foreign_currency": "amount CURRENCY or null",
       "sterling_total": number_or_null,
       "non_college_staff": boolean
-    }},
-    "other": {{
+    },
+    "other": {
       "date": "YYYY-MM-DD or null",
       "expense_type": "valid type or null",
       "description": "string or null",
       "foreign_currency": "amount CURRENCY or null",
       "sterling_total": number_or_null,
       "is_non_uk_eu": boolean
-    }}
-  }}
-}}
+    }
+  }
+}
 
 Apply the user's instruction to the appropriate fields. If changing sections, move relevant data to the new section."""
 
-    messages = [{"role": "user", "content": prompt}]
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Build initial context message with image and current data
+    initial_content = []
+    if image_base64:
+        initial_content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{image_base64}"}
+        })
+
+    context_text = "Here is the receipt image and current parsed data."
+    if original_data:
+        context_text += f"\n\nCurrent expense data:\n{json.dumps(original_data, indent=2)}"
+
+    initial_content.append({"type": "text", "text": context_text})
+    messages.append({"role": "user", "content": initial_content})
+
+    # Add chat history if provided
+    if chat_history:
+        for msg in chat_history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+
+    # Add current user instruction
+    messages.append({"role": "user", "content": user_text})
 
     completion = await client.chat.completions.create(
         model=model,
