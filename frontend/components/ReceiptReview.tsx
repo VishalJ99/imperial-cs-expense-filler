@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Receipt } from '@/app/page'
 import ImageModal from './ImageModal'
 
@@ -22,6 +22,10 @@ export default function ReceiptReview({
   const [userInput, setUserInput] = useState('')
   const [parseMode, setParseMode] = useState<'image' | 'text'>('image')
   const [isModalOpen, setIsModalOpen] = useState(false)
+
+  useEffect(() => {
+    setUserInput('')
+  }, [currentIndex])
 
   const receipt = receipts[currentIndex]
 
@@ -169,6 +173,22 @@ export default function ReceiptReview({
                     {receipt.parsed.confidence}
                   </span>
                 </div>
+                {/* Show appropriate checkbox based on expense type */}
+                {receipt.parsed.expense_type === 'HOSPITALITY' ? (
+                  <div>
+                    <span className="text-gray-500">Non-college staff:</span>{' '}
+                    <span className={`font-medium ${receipt.parsed.is_group_expense ? 'text-orange-600' : 'text-gray-600'}`}>
+                      {receipt.parsed.is_group_expense ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="text-gray-500">Non UK/EU:</span>{' '}
+                    <span className={`font-medium ${receipt.parsed.is_non_uk_eu ? 'text-orange-600' : 'text-gray-600'}`}>
+                      {receipt.parsed.is_non_uk_eu ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="mt-3 pt-3 border-t">
                 <span className="text-gray-500 text-sm">Description:</span>

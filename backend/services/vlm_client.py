@@ -33,38 +33,45 @@ PARSE_IMAGE_PROMPT = f"""Analyze this receipt image. Perform OCR to extract all 
 1. expense_type: Classify as ONE of these exact values:
    {json.dumps(VALID_EXPENSE_TYPES)}
 
+   IMPORTANT: Food/meal/restaurant receipts should always be "HOTEL / SUBSISTENCE"
+
 2. amount: Total amount paid (number only, e.g., 199.61)
 3. currency: USD, GBP, EUR, etc.
 4. date: In YYYY-MM-DD format
 5. vendor: Business/merchant name
-6. description: A paragraph with ALL relevant details for an expense report:
-   - What was purchased/service received
-   - Location if visible
-   - Business purpose (infer if receipt is from conference area, business district, etc.)
-   - Number of people if it's a group meal
-7. guest_count: Number of people (for meals/hospitality), null otherwise
-8. is_group_expense: true if multiple people, false otherwise
+6. description: Write a professional expense description that includes:
+   - What was purchased (e.g., "Lunch", "Dinner", specific items if visible)
+   - The venue/location name
+   - Assume this is a business expense during a conference or work trip - phrase it accordingly
+   - Example: "Lunch during conference at The Milner hotel, Cambridge"
+7. guest_count: Number of people if visible on receipt, null otherwise
+8. is_group_expense: true if receipt shows multiple people, false otherwise
 9. confidence: "high" if receipt is clear, "medium" if some parts unclear, "low" if hard to read
+10. is_non_uk_eu: true if the receipt is from outside UK/EU (based on currency like USD/CAD/AUD or location like USA/Canada/Asia), false if GBP/EUR or UK/EU location
 
 Return ONLY valid JSON, no markdown or explanation:
-{{"expense_type": "...", "amount": 0.00, "currency": "...", "date": "YYYY-MM-DD", "vendor": "...", "description": "...", "guest_count": null, "is_group_expense": false, "confidence": "..."}}"""
+{{"expense_type": "...", "amount": 0.00, "currency": "...", "date": "YYYY-MM-DD", "vendor": "...", "description": "...", "guest_count": null, "is_group_expense": false, "confidence": "...", "is_non_uk_eu": false}}"""
 
 PARSE_TEXT_PROMPT = f"""The user describes a receipt/expense. Extract structured data from their description.
 
 1. expense_type: Classify as ONE of these exact values:
    {json.dumps(VALID_EXPENSE_TYPES)}
 
+   IMPORTANT: Food/meal/restaurant expenses should always be "HOTEL / SUBSISTENCE"
+
 2. amount: Total amount (number only)
-3. currency: USD, GBP, EUR, etc. (default USD if not specified)
-4. date: In YYYY-MM-DD format (use 2025-12-01 if not specified)
+3. currency: USD, GBP, EUR, etc. (default GBP if not specified)
+4. date: In YYYY-MM-DD format (use today's date if not specified)
 5. vendor: Business name (use "Unknown" if not provided)
-6. description: Clean, professional version of their description for expense report
+6. description: Write a professional expense description for a conference/work trip context
+   - Example: "Lunch during conference at The Milner hotel, Cambridge"
 7. guest_count: Number of people if mentioned, null otherwise
 8. is_group_expense: true if multiple people mentioned
 9. confidence: "high" since user provided the info
+10. is_non_uk_eu: true if currency is not GBP/EUR or location is outside UK/EU, false otherwise
 
 Return ONLY valid JSON, no markdown:
-{{"expense_type": "...", "amount": 0.00, "currency": "...", "date": "YYYY-MM-DD", "vendor": "...", "description": "...", "guest_count": null, "is_group_expense": false, "confidence": "..."}}"""
+{{"expense_type": "...", "amount": 0.00, "currency": "...", "date": "YYYY-MM-DD", "vendor": "...", "description": "...", "guest_count": null, "is_group_expense": false, "confidence": "...", "is_non_uk_eu": false}}"""
 
 
 def get_client():

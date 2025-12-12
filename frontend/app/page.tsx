@@ -18,6 +18,7 @@ export interface ParsedReceipt {
   guest_count: number | null
   is_group_expense: boolean
   confidence: string
+  is_non_uk_eu: boolean
 }
 
 export interface Receipt {
@@ -41,6 +42,8 @@ export interface HeaderInfo {
   bank_branch: string
   sort_code: string
   account_number: string
+  foreign_currency: string
+  exchange_rate: string
 }
 
 type AppState = 'upload' | 'review'
@@ -66,6 +69,8 @@ export default function Home() {
       bank_branch: '',
       sort_code: '',
       account_number: '',
+      foreign_currency: 'USD',
+      exchange_rate: '0.79',
     }
   })
   const [processing, setProcessing] = useState(false)

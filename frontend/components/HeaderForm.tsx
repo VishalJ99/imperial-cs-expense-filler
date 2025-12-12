@@ -103,6 +103,38 @@ export default function HeaderForm({ headerInfo, onChange }: Props) {
         />
       </div>
 
+      <hr className="my-2" />
+      <h3 className="font-semibold text-xs text-gray-600">Currency Conversion</h3>
+
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <label className="block text-xs text-gray-500 mb-1">Foreign Currency</label>
+          <select
+            value={headerInfo.foreign_currency}
+            onChange={(e) => update('foreign_currency', e.target.value)}
+            className="w-full px-2 py-1.5 border rounded text-sm"
+          >
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="CAD">CAD</option>
+            <option value="AUD">AUD</option>
+            <option value="CHF">CHF</option>
+            <option value="JPY">JPY</option>
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs text-gray-500 mb-1">→ GBP Rate</label>
+          <input
+            type="number"
+            step="0.01"
+            value={headerInfo.exchange_rate}
+            onChange={(e) => update('exchange_rate', e.target.value)}
+            className="w-full px-2 py-1.5 border rounded text-sm"
+            placeholder="0.79"
+          />
+        </div>
+      </div>
+
       <p className="text-xs text-gray-400 italic">
         Saved automatically to browser storage
       </p>
