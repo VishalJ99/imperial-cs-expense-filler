@@ -6,9 +6,11 @@ A web app that uses Vision Language Models (VLMs) to automatically parse receipt
 
 - **Drag & drop** receipt images (PNG, JPEG, HEIC, PDF)
 - **VLM-powered OCR** extracts expense details automatically
+- **Multi-turn VLM chat** with image context and conversation history
 - **Human-in-the-loop** refinement for unclear receipts
-- **Text-only mode** for when images are unreadable
+- **Type-specific fields** matching Excel sections (Travel, Mileage, Hospitality, Other)
 - **Auto-generates** filled Excel form + renamed receipt files as ZIP
+- **Auto-fills signature section** with name and date
 
 ## Quick Start
 
@@ -44,16 +46,18 @@ Frontend runs at http://localhost:3000
 
 ## Usage
 
-1. **Fill header info** (left panel) - name, bank details, etc. Auto-saves to browser.
+1. **Fill header info** (left panel) - name, CID, purpose of claim, bank details, etc. Auto-saves to browser.
 2. **Drag & drop receipts** into the center area
 3. **Click "Process All Receipts"** - VLM extracts data from each image
 4. **Review each receipt**:
-   - See extracted expense type, amount, date, vendor, description
-   - If wrong: type corrections in the text box → click "Re-parse"
-   - Toggle "Parse from: Text" for unreadable receipts
+   - See 4 collapsible sections (Travel General, Travel Mileage, Hospitality, Other)
+   - Active section is highlighted and expanded with editable fields
+   - Click other section headers to switch expense type
+   - Use **VLM Chat** for complex operations (e.g., "divide total by 6 for shared bill")
+     - Chat maintains history and sees the receipt image for context
 5. **Approve** each receipt when satisfied
 6. **Generate Excel & ZIP** - downloads:
-   - `{Surname}_E1-expense-form.xlsx` (filled)
+   - `{Surname}_E1-expense-form.xlsx` (filled with signature section auto-completed)
    - `receipts/` folder with renamed files like `HOSPITALITY_2025-12-05_monzu_199.61USD.png`
 
 ## Tech Stack

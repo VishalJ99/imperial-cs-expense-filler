@@ -82,7 +82,8 @@ sequenceDiagram
 | `frontend/app/page.tsx` | Main orchestrator, type definitions | `processAllReceipts()`, `handleReparse()`, `handleGenerate()`, `handleUpdateParsed()` |
 | `frontend/components/ReceiptReview.tsx` | Receipt review UI with type-specific collapsible sections | 4 sections (Travel General, Mileage, Hospitality, Other), inline field editing, VLM chat |
 | `frontend/components/ImageModal.tsx` | Full-screen image viewer | Pan/zoom with react-zoom-pan-pinch, keyboard controls |
-| `frontend/components/HeaderForm.tsx` | User info form | Auto-saves to localStorage, exchange rate field |
+| `frontend/components/HeaderForm.tsx` | User info form | Auto-saves to localStorage, purpose of claim, exchange rate |
+| `frontend/lib/types.ts` | TypeScript type definitions | ParsedReceipt, Receipt (with chat_history), HeaderInfo, field types |
 | `frontend/components/DropZone.tsx` | File upload | Drag & drop, file type filtering |
 | `frontend/components/ModelSelector.tsx` | VLM model picker | Dropdown to select VLM model |
 
@@ -142,9 +143,27 @@ flowchart LR
 | **Hospitality** | 32-35 | Date, Principal Guest, Organisation, Total Numbers, Foreign Currency, Sterling Total, Non-college Staff |
 | **Other/Subsistence** | 41-47 | Date, Expense Type (HOTEL/SUBSISTENCE/CONFERENCE FEES/etc), Description, Foreign Currency, Sterling Total, Non UK/EU |
 
-### ParsedReceipt Data Structure
+### Data Structures
 
 ```typescript
+// Receipt with chat history for multi-turn VLM conversations
+interface Receipt {
+  id: string
+  filename: string
+  image_base64: string
+  thumbnail_base64: string
+  parsed: ParsedReceipt | null
+  approved: boolean
+  processing: boolean
+  error: string | null
+  chat_history: ChatMessage[]  // Stores VLM chat for this receipt
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 interface ParsedReceipt {
   active_section: 'travel_general' | 'travel_mileage' | 'hospitality' | 'other'
   confidence: 'high' | 'medium' | 'low'
@@ -156,16 +175,65 @@ interface ParsedReceipt {
     other: { date, expense_type, description, foreign_currency, sterling_total, is_non_uk_eu }
   }
 }
+
+interface HeaderInfo {
+  name: string
+  cid: string
+  purpose: string        // Purpose of claim (fills C6)
+  dob: string
+  address: string
+  postcode: string
+  bank_name: string
+  bank_branch: string
+  sort_code: string
+  account_number: string
+  foreign_currency: string
+  exchange_rate: string
+}
 ```
+
+### Excel Auto-Fill Cells
+
+| Cell | Content | Source |
+|------|---------|--------|
+| C3 | Name | HeaderInfo.name |
+| C4 | CID | HeaderInfo.cid |
+| C6 | Purpose of Claim | HeaderInfo.purpose |
+| G5 | Date of Birth | HeaderInfo.dob |
+| G6 | Address | HeaderInfo.address |
+| I10 | Postcode | HeaderInfo.postcode |
+| K5-K9 | Bank Details | HeaderInfo.bank_* |
+| J63 | Claimant Signature | HeaderInfo.name (auto) |
+| N63 | Date | Today's date (auto) |
 
 See `SECTION_TO_EXCEL` in `excel_generator.py` for section routing.
 
-## VLM Prompts
+## VLM Prompts & Chat
 
 Located in `vlm_client.py`:
 - `PARSE_IMAGE_PROMPT` - For image-based parsing (OCR + semantic understanding)
 - `PARSE_TEXT_PROMPT` - For text-only parsing (user describes receipt)
-- `refine_receipt()` - VLM chat for complex operations (e.g., "divide by 6 for shared bill")
+- `refine_receipt()` - Multi-turn VLM chat with:
+  - Receipt image for visual context
+  - Current parsed data
+  - Chat history for conversation continuity
+  - User instruction (e.g., "divide by 6 for shared bill")
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant B as Backend
+    participant V as VLM
+
+    Note over U,V: VLM Chat Flow
+    U->>F: Enter instruction in VLM Chat
+    F->>B: POST /api/reparse with:<br/>- image_base64<br/>- original_data (current parsed)<br/>- chat_history<br/>- user_text
+    B->>V: Build multi-turn messages:<br/>1. System prompt<br/>2. Image + current data<br/>3. Previous chat messages<br/>4. New user instruction
+    V-->>B: Updated JSON response
+    B-->>F: {parsed}
+    F->>F: Append to chat_history:<br/>- user message<br/>- assistant response
+```
 
 All prompts return the type-specific JSON structure with `active_section`, `confidence`, `raw_description`, and `fields` containing all 4 section field objects.
 
