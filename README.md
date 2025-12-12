@@ -58,11 +58,11 @@ Frontend runs at http://localhost:3000
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14, React, Tailwind CSS
+- **Frontend**: Next.js 14, React, Tailwind CSS, react-zoom-pan-pinch (image viewer)
 - **Backend**: FastAPI, Python 3.11+
-- **VLM**: OpenRouter API (Qwen3 VL 235B default)
+- **VLM**: OpenRouter API (Qwen3 VL 8B default)
 - **Excel**: openpyxl
-- **Image Processing**: Pillow, pillow-heif, pdf2image
+- **Image Processing**: Pillow, pillow-heif, pymupdf (PDF conversion)
 
 ## API Endpoints
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Receipt } from '@/app/page'
+import ImageModal from './ImageModal'
 
 interface Props {
   receipts: Receipt[]
@@ -20,6 +21,7 @@ export default function ReceiptReview({
 }: Props) {
   const [userInput, setUserInput] = useState('')
   const [parseMode, setParseMode] = useState<'image' | 'text'>('image')
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const receipt = receipts[currentIndex]
 
@@ -55,22 +57,33 @@ export default function ReceiptReview({
 
       {/* Main content area */}
       <div className="flex gap-6">
-        {/* Thumbnail */}
+        {/* Image Preview */}
         <div className="flex-shrink-0">
-          {receipt.thumbnail_base64 ? (
-            <img
-              src={`data:image/png;base64,${receipt.thumbnail_base64}`}
-              alt={receipt.filename}
-              className="w-48 h-auto rounded border"
-            />
+          {(receipt.image_base64 || receipt.thumbnail_base64) ? (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="block cursor-zoom-in group relative"
+              aria-label="Click to view full size"
+            >
+              <img
+                src={`data:image/png;base64,${receipt.image_base64 || receipt.thumbnail_base64}`}
+                alt={receipt.filename}
+                className="w-80 max-h-96 object-contain rounded border group-hover:opacity-90 transition-opacity"
+              />
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
+                  Click to enlarge
+                </span>
+              </div>
+            </button>
           ) : (
-            <div className="w-48 h-64 bg-gray-100 rounded border flex items-center justify-center">
+            <div className="w-80 h-64 bg-gray-100 rounded border flex items-center justify-center">
               <span className="text-gray-400 text-sm">
                 {receipt.processing ? 'Processing...' : 'No preview'}
               </span>
             </div>
           )}
-          <p className="text-xs text-gray-500 mt-1 truncate w-48">
+          <p className="text-xs text-gray-500 mt-1 truncate w-80">
             {receipt.filename}
           </p>
         </div>
@@ -274,6 +287,14 @@ export default function ReceiptReview({
           </button>
         ))}
       </div>
+
+      {/* Full-screen image modal */}
+      <ImageModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        imageSrc={`data:image/png;base64,${receipt.image_base64 || receipt.thumbnail_base64}`}
+        alt={receipt.filename}
+      />
     </div>
   )
 }

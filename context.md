@@ -79,7 +79,8 @@ sequenceDiagram
 | File | Purpose | Key Functions |
 |------|---------|---------------|
 | `frontend/app/page.tsx` | Main orchestrator | `processAllReceipts()`, `handleReparse()`, `handleGenerate()` |
-| `frontend/components/ReceiptReview.tsx` | Receipt review UI | Parse mode toggle, re-parse button, approve flow |
+| `frontend/components/ReceiptReview.tsx` | Receipt review UI | Parse mode toggle, re-parse button, approve flow, image preview |
+| `frontend/components/ImageModal.tsx` | Full-screen image viewer | Pan/zoom with react-zoom-pan-pinch, keyboard controls |
 | `frontend/components/HeaderForm.tsx` | User info form | Auto-saves to localStorage |
 | `frontend/components/DropZone.tsx` | File upload | Drag & drop, file type filtering |
 
@@ -178,8 +179,9 @@ AVAILABLE_MODELS = [
 - openai - OpenRouter client (OpenAI-compatible API)
 - openpyxl - Excel manipulation
 - pillow, pillow-heif - Image processing
-- pdf2image - PDF to image conversion (requires poppler)
+- pymupdf - PDF to image conversion (no external dependencies)
 
 ### Frontend
 - next, react - UI framework
 - tailwindcss - Styling
+- react-zoom-pan-pinch - Image pan/zoom in modal viewer

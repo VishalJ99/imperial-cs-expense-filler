@@ -2,7 +2,7 @@ import os
 import json
 import time
 from typing import Optional
-from openai import OpenAI
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -68,8 +68,8 @@ Return ONLY valid JSON, no markdown:
 
 
 def get_client():
-    """Get OpenAI client configured for OpenRouter."""
-    return OpenAI(
+    """Get async OpenAI client configured for OpenRouter."""
+    return AsyncOpenAI(
         api_key=OPENROUTER_API_KEY,
         base_url="https://openrouter.ai/api/v1",
     )
@@ -96,7 +96,7 @@ async def parse_receipt_image(image_base64: str, model: str) -> dict:
     ]
 
     print(f"[VLM] Sending request to OpenRouter...")
-    completion = client.chat.completions.create(
+    completion = await client.chat.completions.create(
         model=model,
         messages=messages,
         max_tokens=1000,
@@ -124,7 +124,7 @@ async def parse_receipt_text(user_text: str, model: str) -> dict:
         {"role": "user", "content": user_text},
     ]
 
-    completion = client.chat.completions.create(
+    completion = await client.chat.completions.create(
         model=model,
         messages=messages,
         max_tokens=1000,
@@ -160,7 +160,7 @@ Update the expense data based on user's input. Return ONLY valid JSON with these
 
     messages = [{"role": "user", "content": prompt}]
 
-    completion = client.chat.completions.create(
+    completion = await client.chat.completions.create(
         model=model,
         messages=messages,
         max_tokens=1000,
